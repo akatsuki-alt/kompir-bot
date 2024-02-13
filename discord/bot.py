@@ -1,4 +1,5 @@
 from bot.discord.commands.ping import PingCommand
+from bot.discord.commands.link import LinkCommand
 
 from bot.discord.commands import Command
 from common.logging import get_logger
@@ -8,6 +9,7 @@ from discord import Client
 from typing import List
 
 import discord
+import shlex
 
 class DiscordBot(Client):
     
@@ -25,7 +27,7 @@ class DiscordBot(Client):
         # TODO: custom prefixes
         prefix = "!"
         if message.content.startswith("!"):
-            split = message.content.split(" ")
+            split = shlex.split(message.content)
             command = split[0][len(prefix):]
             args = split[1:]
             for cmd in self.commands:
@@ -36,7 +38,7 @@ class DiscordBot(Client):
             await message.reply("Unknown command!")
     
     def get_commands(self) -> List[Command]:
-        return [PingCommand()]
+        return [PingCommand(), LinkCommand()]
 
 class DiscordBotService(Service):
     def __init__(self):
