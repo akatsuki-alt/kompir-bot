@@ -1,6 +1,7 @@
 from common.performance import by_version, SimulatedScore
 from common.constants import Mods, BeatmapStatus
 from common.database.objects import DBBeatmap
+from common.utils import MapStats
 
 from discord import Embed, Message, Color
 from typing import List
@@ -94,7 +95,9 @@ class RecentCommand(Command):
         if play.completed < 2:
             completion = f"({(play.get_total_hits() / beatmap.get_total_hits()) * 100:.2f}%)"
         
-        beatmap_info = f" **AR**: {beatmap.ar}, OD: {beatmap.od}, CS: {beatmap.cs}, HP: {beatmap.hp}, {beatmap.bpm} BPM"
+        map_stats = MapStats(mods=play.mods, ar=beatmap.ar, od=beatmap.od, hp=beatmap.hp, cs=beatmap.cs, bpm=beatmap.bpm)
+        
+        beatmap_info = f" AR: {map_stats.ar:.1f}, OD: {map_stats.od:.1f}, CS: {map_stats.cs:.1f}, HP: {map_stats.hp:.1f}, BPM: {map_stats.bpm:.0f}"
         play_info =  f" **Stats**: {play.count_300}/{play.count_100}/{play.count_50}/{play.count_miss} {play.accuracy:.2f}% {play.max_combo}/{beatmap.max_combo}x {play.rank} +{Mods(play.mods).short} {completion} {play.score:,}\n"
         play_info += f" **PP**: {play.pp:.2f}/{fc_pp:.2f} (SS: {ss_pp:.2f})\n"
 
