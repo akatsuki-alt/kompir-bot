@@ -100,9 +100,8 @@ class RecentCommand(Command):
         beatmap_info = f" AR: {map_stats.ar:.1f}, OD: {map_stats.od:.1f}, CS: {map_stats.cs:.1f}, HP: {map_stats.hp:.1f}, BPM: {map_stats.bpm:.0f}"
         play_info =  f" **Stats**: {play.count_300}/{play.count_100}/{play.count_50}/{play.count_miss} {play.accuracy:.2f}% {play.max_combo}/{beatmap.max_combo}x **{play.rank} +{Mods(play.mods).short} {completion}** {play.score:,}\n"
         play_info += f" **PP**: {play.pp:.2f}/{fc_pp:.2f} (SS: {ss_pp:.2f})\n"
-
         embed = Embed(color=Color.red(), title=f"Recent play for {user.username} on {server.server_name}")
-        embed.add_field(name=beatmap.get_title(), value=beatmap_info, inline=False)
+        embed.description = f"**[{beatmap.get_title()}]({beatmap.get_url()})**\n{beatmap_info}"
         embed.add_field(name="Play info", value=play_info, inline=False)
         embed.set_footer(text=f"Try #{retries}, Total playcount: {total_playcount}, Play ID: {play.id}, {BeatmapStatus(status).name}")
         embed.set_thumbnail(url=f"https://b.ppy.sh/thumb/{beatmap.set_id}l.jpg")
