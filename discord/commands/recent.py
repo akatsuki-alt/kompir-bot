@@ -42,12 +42,12 @@ class RecentCommand(Command):
                 return
             user = server.get_user_info(link.links[server.server_name])[0]
             if not user:
-                await message.reply(f"User not found!")
+                await message.reply(f"User not found on {server.server_name}!")
                 return
         else:
             user = server.get_user_info(user)[0]
             if not user:
-                await message.reply(f"User not found!")
+                await message.reply(f"User not found on {server.server_name}!")
                 return
         if mode == -1:
             if link:
