@@ -1,6 +1,6 @@
+from bot.discord.commands.recent import RecentCommand
 from bot.discord.commands.ping import PingCommand
 from bot.discord.commands.user_settings import *
-
 from bot.discord.commands import Command
 from common.logging import get_logger
 from common.service import Service
@@ -33,12 +33,19 @@ class DiscordBot(Client):
             for cmd in self.commands:
                 if cmd.name == command or command in cmd.aliases:
                     self.logger.info(f"{message.author.name} ({message.author.id}): {message.content}")
-                    await cmd.run(message, args)
+                    try:
+                        await cmd.run(message, args)
+                    except Exception as e:
+                        error_embed = discord.Embed(title=f"An error has occurred! ({type(e).__name__})")
+                        error_embed.description = f"```{e}```"
+                        self.logger.error(f"Unhandled exception in command {cmd.name}!", exc_info=e)
+                        error_embed.set_footer(text="Error has been reported automatically. No further action is required.")
+                        await message.reply(embed=error_embed)
                     return
             await message.reply("Unknown command!")
     
     def get_commands(self) -> List[Command]:
-        return [PingCommand(), LinkCommand(), SetDefaultModeCommand(), SetDefaultServerCommand()]
+        return [PingCommand(), LinkCommand(), SetDefaultModeCommand(), SetDefaultServerCommand(), RecentCommand()]
 
 class DiscordBotService(Service):
     def __init__(self):
