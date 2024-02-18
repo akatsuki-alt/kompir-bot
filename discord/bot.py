@@ -1,4 +1,5 @@
 from bot.discord.commands.recent import RecentCommand
+from bot.discord.commands.help import ServersCommand
 from bot.discord.commands.ping import PingCommand
 from bot.discord.commands.user_settings import *
 from bot.discord.commands import Command
@@ -45,7 +46,7 @@ class DiscordBot(Client):
             await message.reply("Unknown command!")
     
     def get_commands(self) -> List[Command]:
-        return [PingCommand(), LinkCommand(), SetDefaultModeCommand(), SetDefaultServerCommand(), RecentCommand()]
+        return [PingCommand(), LinkCommand(), SetDefaultModeCommand(), SetDefaultServerCommand(), RecentCommand(), ServersCommand()]
 
 class DiscordBotService(Service):
     def __init__(self):
