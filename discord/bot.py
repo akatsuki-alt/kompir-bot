@@ -2,6 +2,7 @@ from bot.discord.commands.query import DatabaseQueryCommand
 from bot.discord.commands.recent import RecentCommand
 from bot.discord.commands.help import ServersCommand
 from bot.discord.commands.ping import PingCommand
+from bot.discord.commands.show import ShowCommand
 from bot.discord.commands.user_settings import *
 from bot.discord.commands import Command
 from common.logging import get_logger
@@ -55,7 +56,7 @@ class DiscordBot(Client):
             await message.reply("Unknown command!")
     
     def get_commands(self) -> List[Command]:
-        return [PingCommand(), LinkCommand(), SetDefaultModeCommand(), SetDefaultServerCommand(), RecentCommand(), ServersCommand(), DatabaseQueryCommand()]
+        return [PingCommand(), LinkCommand(), SetDefaultModeCommand(), SetDefaultServerCommand(), RecentCommand(), ServersCommand(), DatabaseQueryCommand(), ShowCommand()]
 
 class DiscordBotService(Service):
     def __init__(self):

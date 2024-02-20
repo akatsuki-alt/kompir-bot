@@ -48,6 +48,24 @@ class Command:
     async def _msg_no_permission(self, message: Message):
         await message.reply("You do not have permission to use this command!")
 
+    def _parse_args(self, args: List[str]) -> dict:
+        result = {'default': list()}
+        prev = None
+        for arg in args:
+            if arg.startswith('-') and not ' ' in arg:
+                if prev:
+                    result[prev] = None
+                prev = arg[1:]
+            else:
+                if prev:
+                    result[prev] = arg
+                    prev = None
+                else:
+                    result['default'].append(arg)
+        if prev:
+            result[prev] = None
+        return result
+
     async def run(self, message: Message, args: List[str]):
         pass
 
