@@ -23,6 +23,7 @@ class ShowCommand(Command):
         with app.database.session as session:
             for stats in session.query(DBStatsTemp).filter(DBStatsTemp.date < yesterday):
                 session.delete(stats)
+                session.commit()
             recorded_stats = session.query(DBStatsTemp).filter(
                 DBStatsTemp.user_id == user_id,
                 DBStatsTemp.server == server,
@@ -31,11 +32,10 @@ class ShowCommand(Command):
             ).order_by(DBStatsTemp.date.asc())
             if recorded_stats.count() == 0:
                 stats = self.get_current_stats(server, user_id, mode, relax, discord_id)
-                session.add(stats)
+                session.merge(stats)
+                session.commit()
             else:
                 stats = recorded_stats.first()
-            session.expunge(stats)
-            session.commit()
         return stats
 
     
@@ -114,4 +114,7 @@ class ShowCommand(Command):
         add_field("Global rank", "global_rank", prefix="#", asc=True)
         add_field("Country rank", "country_rank", prefix="#", asc=True) # TODO: add country
         add_field("Performance points", "pp", suffix="pp")
+        add_field("Global score rank", "global_score_rank", prefix="#", asc=True)
+        add_field("Country score rank", "country_score_rank", prefix="#", asc=True)
+        add_field("First places", "first_places")
         await message.reply(embed=embed)
