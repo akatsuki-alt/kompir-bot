@@ -36,6 +36,7 @@ class LinkCommand(Command):
                 link.default_server = server_name
                 link.default_mode = 0
                 link.default_relax = 0
+                link.permissions = 0
                 link.links = {}
                 link.preferences = {}
                 session.add(link)

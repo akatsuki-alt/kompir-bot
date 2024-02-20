@@ -45,6 +45,9 @@ class Command:
     async def _msg_not_linked(self, message: Message):
         await message.reply("This command requires a link! Use !link <username> <server> to link your account.")
 
+    async def _msg_no_permission(self, message: Message):
+        await message.reply("You do not have permission to use this command!")
+
     async def run(self, message: Message, args: List[str]):
         pass
 

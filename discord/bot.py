@@ -1,3 +1,4 @@
+from bot.discord.commands.query import DatabaseQueryCommand
 from bot.discord.commands.recent import RecentCommand
 from bot.discord.commands.help import ServersCommand
 from bot.discord.commands.ping import PingCommand
@@ -34,6 +35,14 @@ class DiscordBot(Client):
             for cmd in self.commands:
                 if cmd.name == command or command in cmd.aliases:
                     self.logger.info(f"{message.author.name} ({message.author.id}): {message.content}")
+                    if cmd.permission_level > 0:
+                        link = cmd._get_link(message)
+                        if not link:
+                            await cmd._msg_no_permission(message)
+                            return
+                        if link.permissions < cmd.permission_level:
+                            await cmd._msg_no_permission(message)
+                            return
                     try:
                         await cmd.run(message, args)
                     except Exception as e:
@@ -46,7 +55,7 @@ class DiscordBot(Client):
             await message.reply("Unknown command!")
     
     def get_commands(self) -> List[Command]:
-        return [PingCommand(), LinkCommand(), SetDefaultModeCommand(), SetDefaultServerCommand(), RecentCommand(), ServersCommand()]
+        return [PingCommand(), LinkCommand(), SetDefaultModeCommand(), SetDefaultServerCommand(), RecentCommand(), ServersCommand(), DatabaseQueryCommand()]
 
 class DiscordBotService(Service):
     def __init__(self):
