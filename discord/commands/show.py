@@ -102,18 +102,26 @@ class ShowCommand(Command):
             if delta:
                 delta_str = f"(+{delta})" if delta > 0 else f"({delta})"
             embed.add_field(name=title, value=f"{prefix}{value:{format}}{suffix}\n{delta_str}", inline=True)
+        def add_field_level():
+            delta = current_stats.level - previous_stats.level
+            delta_str = ""
+            if delta:
+                delta_str = f"(+{delta*100:.2f}%)"
+            level = int(current_stats.level)
+            percentage = (current_stats.level - level) * 100
+            embed.add_field(name="Level", value=f"{level} +{percentage:.2f}% {delta_str}", inline=True)
         add_field("Ranked score", "ranked_score")
         add_field("Total score", "total_score")
         add_field("Total hits", "total_hits")
         add_field("Play count", "play_count")
         add_field("Play time", "play_time") # TODO
         add_field("Replays watched", "replays_watched")
-        add_field("Level", "level", format=".2f") # TODO
+        add_field_level()
         add_field("Accuracy", "accuracy", suffix="%", format=".2f")
-        add_field("Max combo", "max_combo")
+        add_field("Max combo", "max_combo", suffix="x")
         add_field("Global rank", "global_rank", prefix="#", asc=True)
         add_field("Country rank", "country_rank", prefix="#", asc=True) # TODO: add country
-        add_field("Performance points", "pp", suffix="pp")
+        add_field("Performance points", "pp", format=",.2f", suffix="pp")
         add_field("Global score rank", "global_score_rank", prefix="#", asc=True)
         add_field("Country score rank", "country_score_rank", prefix="#", asc=True)
         add_field("First places", "first_places")
