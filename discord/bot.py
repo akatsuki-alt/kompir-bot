@@ -1,3 +1,4 @@
+from bot.discord.commands.server_settings import SetPrefixCommand
 from bot.discord.commands.query import DatabaseQueryCommand
 from bot.discord.commands.recent import RecentCommand
 from bot.discord.commands.help import ServersCommand
@@ -5,9 +6,10 @@ from bot.discord.commands.ping import PingCommand
 from bot.discord.commands.show import ShowCommand
 from bot.discord.commands.user_settings import *
 from bot.discord.commands import Command
+from common.app import config, database
+from common.database.objects import *
 from common.logging import get_logger
 from common.service import Service
-from common.app import config
 from discord import Client
 from typing import List
 
@@ -27,9 +29,11 @@ class DiscordBot(Client):
     async def on_message(self, message: discord.Message):
         if message.author == self.user:
             return
-        # TODO: custom prefixes
         prefix = "!"
-        if message.content.startswith("!"):
+        with database.session as session:
+            if (preferences := session.get(DBServerPreferences, message.guild.id)):
+                prefix = preferences.prefix
+        if message.content.startswith(prefix):
             split = shlex.split(message.content)
             command = split[0][len(prefix):]
             args = split[1:]
@@ -56,7 +60,7 @@ class DiscordBot(Client):
             await message.reply("Unknown command!")
     
     def get_commands(self) -> List[Command]:
-        return [PingCommand(), LinkCommand(), SetDefaultModeCommand(), SetDefaultServerCommand(), RecentCommand(), ServersCommand(), DatabaseQueryCommand(), ShowCommand()]
+        return [PingCommand(), LinkCommand(), SetDefaultModeCommand(), SetDefaultServerCommand(), RecentCommand(), ServersCommand(), DatabaseQueryCommand(), ShowCommand(), SetPrefixCommand()]
 
 class DiscordBotService(Service):
     def __init__(self):
