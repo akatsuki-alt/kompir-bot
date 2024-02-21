@@ -6,6 +6,8 @@ from . import Command
 
 import common.servers as servers
 import common.app as app
+import random
+
 class ShowCommand(Command):
     
     def __init__(self):
@@ -93,7 +95,7 @@ class ShowCommand(Command):
         else:
             current_stats = previous_stats
         embed = Embed(title=f"Stats for {user.username} on {server.server_name}")
-        embed.set_thumbnail(url=server.get_user_pfp(user.id))
+        embed.set_thumbnail(url=f"{server.get_user_pfp(user.id)}?{random.randint(0, 100000000)}")
         def add_field(title, name, prefix="", suffix="", format=",", asc=False):
             value = getattr(current_stats, name)
             value_old = getattr(previous_stats, name)
