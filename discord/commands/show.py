@@ -128,3 +128,18 @@ class ShowCommand(Command):
         add_field("Country score rank", "country_score_rank", prefix="#", asc=True)
         add_field("First places", "first_places")
         await message.reply(embed=embed)
+
+class ResetCommand(Command):
+    
+    def __init__(self) -> None:
+        super().__init__("reset", "Resets your stats")
+    
+    async def run(self, message: Message, args: List[str]):
+        link = self._get_link(message)
+        if not link:
+            await self._msg_not_linked(message)
+            return
+        with app.database.session as session:
+            session.query(DBStatsTemp).filter(DBStatsTemp.discord_id == message.author.id).delete()
+            session.commit()
+        await message.reply("Stats reset!")
