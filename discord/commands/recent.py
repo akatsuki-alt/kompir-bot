@@ -1,6 +1,6 @@
+from common.database.objects import DBBeatmap, DBMapPlaycount
 from common.performance import by_version, SimulatedScore
 from common.constants import Mods, BeatmapStatus
-from common.database.objects import DBBeatmap
 from common.utils import MapStats
 
 from discord import Embed, Message, Color
@@ -64,8 +64,12 @@ class RecentCommand(Command):
             return
         
         retries = 0
-        total_playcount = 0 # TODO
+        total_playcount = 0
         
+        with app.database.managed_session() as session:
+            if (db_most_played := session.get(DBMapPlaycount, (user.id, server.server_name, recent_plays[0].beatmap_id))):
+                total_playcount = db_most_played.play_count
+
         for play in recent_plays:
             if play.beatmap_id != recent_plays[0].beatmap_id:
                 break
