@@ -21,7 +21,7 @@ class SetPrefixCommand(Command):
         if not has_role:
             await message.reply("You don't have permission to use this command!")
             return
-        with app.database.session as session:
+        with app.database.managed_session() as session:
             if (guild := session.get(DBServerPreferences, message.guild.id)):
                 guild.prefix = args[0]
                 session.commit()

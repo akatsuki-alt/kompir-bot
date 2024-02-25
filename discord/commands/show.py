@@ -22,7 +22,7 @@ class ShowCommand(Command):
 
     def get_last_stats(self, server: str, user_id: int, mode: int, relax: int, discord_id: int) -> DBStatsTemp:
         yesterday = datetime.now() - timedelta(days=1)
-        with app.database.session as session:
+        with app.database.managed_session() as session:
             for stats in session.query(DBStatsTemp).filter(DBStatsTemp.date < yesterday):
                 session.delete(stats)
                 session.commit()
@@ -139,7 +139,7 @@ class ResetCommand(Command):
         if not link:
             await self._msg_not_linked(message)
             return
-        with app.database.session as session:
+        with app.database.managed_session() as session:
             session.query(DBStatsTemp).filter(DBStatsTemp.discord_id == message.author.id).delete()
             session.commit()
         await message.reply("Stats reset!")

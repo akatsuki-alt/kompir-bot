@@ -30,7 +30,7 @@ class DiscordBot(Client):
         if message.author == self.user:
             return
         prefix = "!"
-        with database.session as session:
+        with database.managed_session() as session:
             if (preferences := session.get(DBServerPreferences, message.guild.id)):
                 prefix = preferences.prefix
         if message.content.startswith(prefix):

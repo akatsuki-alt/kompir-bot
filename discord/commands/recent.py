@@ -73,7 +73,7 @@ class RecentCommand(Command):
         
         play = recent_plays[0]
         
-        with app.database.session as session:
+        with app.database.managed_session() as session:
             beatmap = session.get(DBBeatmap, play.beatmap_id)
             if not beatmap or not beatmap.beatmapset:
                 await message.reply(f"Beatmap not found???")

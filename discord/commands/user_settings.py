@@ -30,7 +30,7 @@ class LinkCommand(Command):
             await message.reply(f"User {username} not found on {server.server_name}!")
             return
         
-        with database.session as session:
+        with database.managed_session() as session:
             if not (link := session.get(DBBotLink, message.author.id)):
                 link = DBBotLink(discord_id=message.author.id)
                 link.default_server = server_name
@@ -65,7 +65,7 @@ class SetDefaultModeCommand(Command):
             return
         link.default_mode = mode[0]
         link.default_relax = mode[1]
-        with database.session as session:
+        with database.managed_session() as session:
             session.merge(link)
             session.commit()
         await message.reply(f"Set default mode to {args[0]}!")
@@ -89,7 +89,7 @@ class SetDefaultServerCommand(Command):
             await message.reply(f"You are not linked on {args[0]}!")
             return
         link.default_server = args[0]
-        with database.session as session:
+        with database.managed_session() as session:
             session.merge(link)
             session.commit()
         await message.reply(f"Set default server to {args[0]}!")

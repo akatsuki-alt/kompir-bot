@@ -39,7 +39,7 @@ class Command:
             return modes[string]
 
     def _get_link(self, message: Message) -> DBBotLink:
-        with database.session as session:
+        with database.managed_session() as session:
             return session.get(DBBotLink, message.author.id)
 
     async def _msg_not_linked(self, message: Message):
