@@ -118,7 +118,7 @@ class ShowCommand(Command):
             delta = value_old-value if asc else value-value_old
             delta_str = ""
             if delta:
-                delta_str = f"(+{delta})" if delta > 0 else f"({delta})"
+                delta_str = f"(+{delta:{format}})" if delta > 0 else f"({delta:{format}})"
             embed.add_field(name=title, value=f"{prefix}{value:{format}}{suffix}\n{delta_str}", inline=True)
         def add_field_level():
             delta = current_stats.level - previous_stats.level
@@ -139,7 +139,7 @@ class ShowCommand(Command):
         add_field("Max combo", "max_combo", suffix="x")
         add_field("Global rank", "global_rank", prefix="#", asc=True)
         add_field("Country rank", "country_rank", prefix="#", asc=True) # TODO: add country
-        add_field("Performance points", "pp", format=",.2f", suffix="pp")
+        add_field("Performance points", "pp", suffix="pp")
         add_field("Global score rank", "global_score_rank", prefix="#", asc=True)
         add_field("Country score rank", "country_score_rank", prefix="#", asc=True)
         add_field("First places", "first_places")
