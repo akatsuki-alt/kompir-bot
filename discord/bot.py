@@ -1,8 +1,8 @@
 from bot.discord.commands.server_settings import SetPrefixCommand
+from bot.discord.commands.help import ServersCommand, HelpCommand
 from bot.discord.commands.show import ShowCommand, ResetCommand
 from bot.discord.commands.query import DatabaseQueryCommand
 from bot.discord.commands.recent import RecentCommand
-from bot.discord.commands.help import ServersCommand
 from bot.discord.commands.ping import PingCommand
 from bot.discord.commands.user_settings import *
 from bot.discord.commands import Command
@@ -60,12 +60,15 @@ class DiscordBot(Client):
             await message.reply("Unknown command!")
     
     def get_commands(self) -> List[Command]:
-        return [PingCommand(), LinkCommand(), SetDefaultModeCommand(), SetDefaultServerCommand(), RecentCommand(), ServersCommand(), DatabaseQueryCommand(), ShowCommand(), SetPrefixCommand(), ResetCommand()]
+        return [PingCommand(), LinkCommand(), SetDefaultModeCommand(), SetDefaultServerCommand(), RecentCommand(), ServersCommand(), DatabaseQueryCommand(), ShowCommand(), SetPrefixCommand(), ResetCommand(), HelpCommand()]
+
+bot: DiscordBot = None
 
 class DiscordBotService(Service):
     def __init__(self):
         super().__init__("discord_bot", daemonize=True)
 
     def run(self):
+        global bot
         bot = DiscordBot()
         bot.run(config.discord_token)
