@@ -1,5 +1,5 @@
 from common.database.objects import DBStats, DBStatsTemp
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from discord import Message, Embed
 from typing import List
 from . import Command
@@ -40,6 +40,12 @@ class ShowCommand(Command):
                 stats = recorded_stats.first()
         return stats
 
+    def get_stats_for_date(self, server: str, user_id: int, mode: int, relax: int, date: date) -> DBStatsTemp | None:
+        with app.database.managed_session() as session:
+            if (stats := session.get(DBStats, (server, user_id, mode, relax, date))):
+                stats_convert = stats.copy(0)
+                stats_convert.date = datetime(date.year, date.month, date.day)
+                return stats_convert
     
     async def run(self, message: Message, args: List[str]):
         parsed = self._parse_args(args)
@@ -90,6 +96,16 @@ class ShowCommand(Command):
             await message.reply(f"User not found on {server.server_name}!")
             return
         previous_stats = self.get_last_stats(server.server_name, user.id, mode, relax, message.author.id)
+        if 'compare_to' in parsed:
+            try:
+                date = datetime.strptime(parsed['compare_to'], "%Y-%m-%d")
+            except ValueError:
+                await message.reply("Invalid date format! Use YYYY-MM-DD!")
+                return
+            previous_stats = self.get_stats_for_date(server.server_name, user.id, mode, relax, date)
+            if not previous_stats:
+                await message.reply("No stats found for that date!")
+                return
         if datetime.now() - previous_stats.date > timedelta(minutes=5):
             current_stats = self.get_current_stats(server.server_name, user.id, mode, relax, message.author.id)
         else:
