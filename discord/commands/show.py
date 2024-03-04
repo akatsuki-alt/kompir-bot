@@ -113,6 +113,7 @@ class ShowCommand(Command):
             current_stats = previous_stats
         embed = Embed(title=f"Stats for {user.username} on {server.server_name}")
         embed.set_thumbnail(url=f"{server.get_user_pfp(user.id)}?{random.randint(0, 100000000)}")
+        
         def add_field(title, name, prefix="", suffix="", format=",", asc=False):
             value = getattr(current_stats, name)
             value_old = getattr(previous_stats, name)
@@ -132,18 +133,24 @@ class ShowCommand(Command):
             level = int(current_stats.level)
             percentage = (current_stats.level - level) * 100
             embed.add_field(name="Level", value=f"{level} +{percentage:.2f}% {delta_str}", inline=True)
+        def add_field_playtime():
+            delta = current_stats.play_time - previous_stats.play_time
+            delta_str = ""
+            if delta:
+                delta_str = f"(+{delta/60:.2f}m)"
+            embed.add_field(name="Play time", value=f"{current_stats.play_time/3600:.2f}h {delta_str}", inline=True)
         add_field("Ranked score", "ranked_score")
         add_field("Total score", "total_score")
         add_field("Total hits", "total_hits")
         add_field("Play count", "play_count")
-        add_field("Play time", "play_time") # TODO
+        add_field_playtime()
         add_field("Replays watched", "replays_watched")
         add_field_level()
         add_field("Accuracy", "accuracy", suffix="%", format=".2f")
         add_field("Max combo", "max_combo", suffix="x")
         add_field("Global rank", "global_rank", prefix="#", asc=True)
         add_field("Country rank", "country_rank", prefix="#", asc=True) # TODO: add country
-        add_field("Performance points", "pp", suffix="pp")
+        add_field("Performance points", "pp", suffix="pp", format=".0f")
         add_field("Global score rank", "global_score_rank", prefix="#", asc=True)
         add_field("Country score rank", "country_score_rank", prefix="#", asc=True)
         add_field("First places", "first_places")
