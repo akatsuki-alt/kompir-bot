@@ -1,3 +1,4 @@
+from . import PermissionLevelEnum
 from common.database.objects import DBStats, DBStatsTemp
 from datetime import datetime, timedelta, date
 from discord import Message, Embed
@@ -115,11 +116,14 @@ class ShowCommand(Command):
         def add_field(title, name, prefix="", suffix="", format=",", asc=False):
             value = getattr(current_stats, name)
             value_old = getattr(previous_stats, name)
-            delta = value_old-value if asc else value-value_old
-            delta_str = ""
-            if delta:
-                delta_str = f"(+{delta:{format}})" if delta > 0 else f"({delta:{format}})"
-            embed.add_field(name=title, value=f"{prefix}{value:{format}}{suffix}\n{delta_str}", inline=True)
+            if value is None or value_old is None:
+                 embed.add_field(name=title, value=f"{prefix}{value}{suffix}", inline=True)
+            else:
+                delta = value_old-value if asc else value-value_old
+                delta_str = ""
+                if delta:
+                    delta_str = f"(+{delta:{format}})" if delta > 0 else f"({delta:{format}})"
+                embed.add_field(name=title, value=f"{prefix}{value:{format}}{suffix}\n{delta_str}", inline=True)
         def add_field_level():
             delta = current_stats.level - previous_stats.level
             delta_str = ""
@@ -159,3 +163,11 @@ class ResetCommand(Command):
             session.query(DBStatsTemp).filter(DBStatsTemp.discord_id == message.author.id).delete()
             session.commit()
         await message.reply("Stats reset!")
+        
+class ShowClears(Command):
+    
+    def __init__(self,) -> None:
+        super().__init__("showclears", "Shows your clears", aliases=["sc"])
+    
+    async def run(self, message: Message, args: List[str]):
+        pass
