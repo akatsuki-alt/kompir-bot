@@ -32,6 +32,20 @@ class Command:
             'ctb_rx': (2, 1),
             'mania': (3, 0),
         }
+
+    def _get_mode_full_name(self, mode: int, relax: int):
+        modes = {
+            0: 'Standard',
+            1: 'Taiko',
+            2: 'Ctb',
+            3: 'Mania'
+        }
+        relaxs = {
+            0: '',
+            1: 'Relax',
+            2: 'Autopilot'
+        }
+        return f'{modes[mode]} {relaxs[relax]}'.strip()
     
     def _get_mode_from_string(self, string: str) -> Tuple[int, int] | None:
         modes = self._get_modes()
