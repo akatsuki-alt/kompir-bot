@@ -1,6 +1,6 @@
+from bot.discord.commands.show import ShowCommand, ResetCommand, ShowClearsCommand, ShowFirstsCommand
 from bot.discord.commands.server_settings import SetPrefixCommand
 from bot.discord.commands.help import ServersCommand, HelpCommand
-from bot.discord.commands.show import ShowCommand, ResetCommand, ShowClearsCommand
 from bot.discord.commands.query import DatabaseQueryCommand
 from bot.discord.commands.get_file import GetFileCommand
 from bot.discord.commands.recent import RecentCommand
@@ -61,7 +61,7 @@ class DiscordBot(Client):
             await message.reply("Unknown command!")
     
     def get_commands(self) -> List[Command]:
-        return [PingCommand(), LinkCommand(), SetDefaultModeCommand(), SetDefaultServerCommand(), RecentCommand(), ServersCommand(), DatabaseQueryCommand(), ShowCommand(), SetPrefixCommand(), ResetCommand(), HelpCommand(), GetFileCommand(), ShowClearsCommand()]
+        return [PingCommand(), LinkCommand(), SetDefaultModeCommand(), SetDefaultServerCommand(), RecentCommand(), ServersCommand(), DatabaseQueryCommand(), ShowCommand(), SetPrefixCommand(), ResetCommand(), HelpCommand(), GetFileCommand(), ShowClearsCommand(), ShowFirstsCommand()]
 
 bot: DiscordBot = None
 
