@@ -293,4 +293,6 @@ class ShowClearsCommand(Command):
             await message.reply(f"User not found on {server.server_name}!")
             return
         query = f"user_id=={user.id},mode=={mode},relax=={relax}"
-        await ClearsView(f"{user.username} {self._get_mode_full_name(mode, relax)} Clears", query=query,length=7).reply(message)
+        if "query" in parsed:
+            query += f",{parsed['query']}"
+        await ClearsView(f"{user.username} {self._get_mode_full_name(mode, relax)} {server.server_name.title()} Clears", query=query,length=7).reply(message)
