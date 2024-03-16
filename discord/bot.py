@@ -7,6 +7,7 @@ from bot.discord.commands.recent import RecentCommand
 from bot.discord.commands.ping import PingCommand
 from bot.discord.commands.user_settings import *
 from bot.discord.commands import Command
+from bot.discord.commands.maps import SearchMapsCommand
 from common.app import config, database
 from common.database.objects import *
 from common.logging import get_logger
@@ -61,7 +62,7 @@ class DiscordBot(Client):
             await message.reply("Unknown command!")
     
     def get_commands(self) -> List[Command]:
-        return [PingCommand(), LinkCommand(), SetDefaultModeCommand(), SetDefaultServerCommand(), RecentCommand(), ServersCommand(), DatabaseQueryCommand(), ShowCommand(), SetPrefixCommand(), ResetCommand(), HelpCommand(), GetFileCommand(), ShowClearsCommand(), ShowFirstsCommand()]
+        return [PingCommand(), LinkCommand(), SetDefaultModeCommand(), SetDefaultServerCommand(), RecentCommand(), ServersCommand(), DatabaseQueryCommand(), ShowCommand(), SetPrefixCommand(), ResetCommand(), HelpCommand(), GetFileCommand(), ShowClearsCommand(), ShowFirstsCommand(), SearchMapsCommand()]
 
 bot: DiscordBot = None
 
