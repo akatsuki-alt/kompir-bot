@@ -1,9 +1,13 @@
-import io
-from typing import List
 from discord import Button, ButtonStyle, Embed, File, Interaction, Message
-from . import Command
-from discord.ui import View, button
 from wrapper.akatsuki_alt_api.api import instance as api
+
+from common.collections import generate_collection_from_dict
+
+from discord.ui import View, button
+from typing import List
+from . import Command
+
+import io
 
 SORT_METHODS = ["id", "set_id", "max_combo", "bpm", "total_length", "hit_length", "diff"]
 
@@ -124,5 +128,29 @@ class SearchMapsCommand(Command):
                         csv += f"{v}\t"
                     csv += "\n"
             await message.reply(file=File(io.StringIO(csv), filename="maps.csv"))
+        elif 'collection' in parsed:
+            if not parsed['collection']:
+                parsed['collection'] = "Untitled"
+            api_query = api.query_beatmaps(query, 1000, sort, desc)
+            api_query.set_sort(SORT_METHODS[sort], desc)
+            collection = list()
+            while beatmaps := api_query.next():
+                if api_query.count > 10000:
+                    await message.reply("Too many results! Please refine your search.")
+                    return
+                for beatmap in beatmaps:
+                    collection.append({
+                        'id': beatmap.id,
+                        'set_id': beatmap.set_id,
+                        'artist': beatmap.beatmapset.artist,
+                        'title': beatmap.beatmapset.title,
+                        'version': beatmap.version,
+                        'md5': beatmap.md5,
+                        'diff': beatmap.diff,
+                        'mode': beatmap.mode,
+                        'diff': beatmap.diff
+                    })
+            bytes = generate_collection_from_dict(collection, parsed['collection'])
+            await message.reply(file=File(io.BytesIO(bytes), filename=f"{parsed['collection']}.osdb"))
         else:
             await MapsView(query, sort, desc, length=7).reply(message)
