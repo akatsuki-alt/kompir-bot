@@ -132,6 +132,8 @@ class ShowCommand(Command):
         if not user:
             await message.reply(f"User not found on {server.server_name}!")
             return
+        if not server.supports_rx:
+            relax = 0
         stats = stats[0].to_db()
         old_stats = None
         with database.managed_session() as session:
