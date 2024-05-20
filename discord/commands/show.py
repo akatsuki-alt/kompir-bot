@@ -62,30 +62,35 @@ class ShowCommand(Command):
         embed = Embed(title=f"Stats for {user.username}")
         embed.set_thumbnail(url=f"{server.get_user_pfp(user.id)}?cachemakesmesad={random.randint(0, 9**9)}")
         fields = [x.split("|") for x in layout.split("/")]
+        
         for field in fields:
             name = field[0]
             formatting = "{:.2f}"
             reverse = False
+        
             if len(field) > 1:
                 formatting = field[1]
                 if len(field) > 2:
                     reverse = bool(field[2])
+        
             def format(value: float) -> str:
                 if formatting in self.custom_formatting:
                     return self.custom_formatting[formatting](value)
                 else:
                     return formatting.format(value)
+
             if name in stats.__dict__:
-                value = format(getattr(stats, name))
+                attr = getattr(stats, name)
+                value = format(attr) if attr is not None else "N/A"
                 suffix = ""
                 if old_stats and name in old_stats.__dict__ and old_stats.__dict__[name]:
                     difference = getattr(stats, name) - getattr(old_stats, name)
                     if reverse:
                         difference = -difference
-                    if difference:
+                    if difference: # Stats have changed thus showing gain/loss
                         suffix = f" ({format(difference)})" if difference < 0 else f" (+{format(difference)})"
                 embed.add_field(name=self.variable_names[name] if name in self.variable_names else name, value=value+suffix, inline=True)
-                    
+        
         return embed
 
     async def run(self, message: Message, args: List[str]):
@@ -94,19 +99,24 @@ class ShowCommand(Command):
         username = 0
         mode = 0
         relax = 0
+        # Default formatting, format is field_name|formatting|use reverse gain (boolean)/....
+        # TODO: Get formatting from user's config
         formatting = "ranked_score|{:,}/total_score|{:,}/total_hits|{:,}/play_count|{:,}/play_time|play_time/replays_watched|{:,}/level|level/accuracy|{:.2f}%/max_combo|{:,}x/global_rank|#{:.0f}/country_rank|#{:.0f}/pp|{:.0f}pp"
         to_compare = None
+
         if 'compare_to' in parsed:
             to_compare = datetime.strptime(parsed['compare_to'], '%d/%m/%Y').date()
         if 'formatting' in parsed:
             formatting = parsed['formatting']
         if parsed['default']:
             username = parsed['default'][0]
+
         if 'server' in parsed:
             server = servers.by_name(parsed['server'])
             if not server:
                 await message.reply(f"Unknown server! Use !servers to see available servers.")
                 return
+
         if 'mode' in parsed:
             m = self._get_mode_from_string(parsed['mode'])
             if not m:
@@ -114,6 +124,7 @@ class ShowCommand(Command):
                 return
             mode = m[0]
             relax = m[1]
+
         link = self._get_link(message)
         if link:
             if not server:
@@ -126,16 +137,21 @@ class ShowCommand(Command):
         elif not username:
             await self._msg_not_linked(message)
             return
+
         if not server:
             server = servers.by_name("akatsuki")
+
         user, stats = server.get_user_info(username, mode, relax)
         if not user:
             await message.reply(f"User not found on {server.server_name}!")
             return
-        if not server.supports_rx:
+
+        if not server.supports_rx: # Fixes nasty side effect of saving stats as rx
             relax = 0
+
         stats = stats[0].to_db()
         old_stats = None
+
         with database.managed_session() as session:
             for stat in session.query(DBStatsTemp).filter(
                 DBStatsTemp.server == server.server_name,
@@ -143,22 +159,25 @@ class ShowCommand(Command):
                 DBStatsTemp.mode == mode,
                 DBStatsTemp.relax == relax,
                 DBStatsTemp.discord_id == message.author.id
-            ).order_by(DBStatsTemp.date.asc()):
+            ).order_by(DBStatsTemp.date.asc()): # Find oldest stats that isnt expired
                 if (datetime.now() - stat.date) > timedelta(days=1):
                     session.delete(stat)
                 elif not old_stats:
                     old_stats = stat
                     session.expunge(stat)
-            if old_stats:
-                if (datetime.now() - old_stats.date) > timedelta(minutes=5):
+            
+            if old_stats: # Save stats if more than 10 minutes elapsed
+                if (datetime.now() - old_stats.date) > timedelta(minutes=10):
                     session.merge(stats.copy(message.author.id))
             else:
                 session.merge(stats.copy(message.author.id))
-            if to_compare:
+
+            if to_compare: # Get stats from db if a date is specified
                 old_stats = session.get(DBStats, (server.server_name, user.id, mode, relax, to_compare))
                 if not old_stats:
                     await message.reply(f"We don't have stats stored for that day...")
                     return
                 session.expunge(old_stats)
             session.commit()
+
         await message.reply(embed=self.get_embed(server, user, stats, old_stats, formatting))
