@@ -1,432 +1,148 @@
-from discord import ButtonStyle, Interaction, Message, Embed
-from discord.ui import View, button, Button
-
-from datetime import datetime, timedelta, date
-
-from wrapper.akatsuki_alt_api.api import instance as api
-from common.database.objects import DBStats, DBStatsTemp
-from common.constants import Mods
-
+from datetime import datetime, timedelta
+from common.api.server_api import User, Stats, ServerAPI
+from discord import Embed, Message
+from common.app import database
 from typing import List
 from . import Command
-
-import common.repos.beatmaps as beatmaps
+from common.database.objects import DBStatsTemp
 import common.servers as servers
-import common.app as app
 import random
+
+def format_level(level: float) -> str:
+    return f"{level:.0f} +{(level - int(level))*100:.1f}%"
+
+def format_playtime(playtime: int) -> str:
+    if playtime > 3600:
+        return f"{playtime // 3600}h {playtime % 3600 // 60}m"
+    else:
+        return f"{playtime // 60}m {playtime % 60}s"
 
 class ShowCommand(Command):
     
-    def __init__(self):
-        super().__init__("show", "Shows an osu session progress")
-
-    def get_current_stats(self, server: str, user_id: int, mode: int, relax: int, discord_id: int) -> DBStatsTemp | None:
-        _, stats = servers.by_name(server).get_user_info(user_id)
-        for stat in stats:
-            if stat.mode == mode and stat.relax == relax:
-                return stat.to_db().copy(discord_id)
-        return None
-
-    def get_last_stats(self, server: str, user_id: int, mode: int, relax: int, discord_id: int) -> DBStatsTemp:
-        yesterday = datetime.now() - timedelta(days=1)
-        with app.database.managed_session() as session:
-            for stats in session.query(DBStatsTemp).filter(DBStatsTemp.date < yesterday):
-                session.delete(stats)
-                session.commit()
-            recorded_stats = session.query(DBStatsTemp).filter(
-                DBStatsTemp.user_id == user_id,
-                DBStatsTemp.server == server,
-                DBStatsTemp.mode == mode,
-                DBStatsTemp.relax == relax
-            ).order_by(DBStatsTemp.date.asc())
-            if recorded_stats.count() == 0:
-                stats = self.get_current_stats(server, user_id, mode, relax, discord_id)
-                session.merge(stats)
-                session.commit()
-            else:
-                stats = recorded_stats.first()
-        return stats
-
-    def get_stats_for_date(self, server: str, user_id: int, mode: int, relax: int, date: date) -> DBStatsTemp | None:
-        with app.database.managed_session() as session:
-            if (stats := session.get(DBStats, (server, user_id, mode, relax, date))):
-                stats_convert = stats.copy(0)
-                stats_convert.date = datetime(date.year, date.month, date.day)
-                return stats_convert
+    variable_names = {
+        'ranked_score': 'Ranked Score',
+        'total_score': 'Total Score',
+        'play_count': 'Play Count',
+        'play_time': 'Play Time',
+        'replays_watched': 'Replays Views',
+        'accuracy': 'Accuracy',
+        'total_hits': 'Total Hits',
+        'max_combo': 'Max Combo',
+        'level': 'Level',
+        'pp': 'Performance',
+        'first_places': 'First Places',
+        'global_rank': 'Global Rank',
+        'country_rank': 'Country Rank',
+        'global_score_rank': 'Global Score Rank',
+        'country_score_rank': 'Country Score Rank',
+        'xh_rank': 'SS+',
+        'x_rank': 'SS',
+        'sh_rank': 'S+',
+        's_rank': 'S',
+        'a_rank': 'A',
+        'b_rank': 'B',
+        'c_rank': 'C',
+        'd_rank': 'D',
+        'clears': 'Clears',
+        'followers': 'Followers',
+        'medals_unlocked': 'Medals Unlocked',
+    }
     
-    async def run(self, message: Message, args: List[str]):
-        parsed = self._parse_args(args)
-        modes = self._get_modes()
-
-        user = None
-        server = None
-        mode = -1
-        relax = -1
-        
-        for srv in servers.servers:
-            if srv.server_name in parsed:
-                server = srv
-                break
-        for name, (m, r) in modes.items():
-            if name in parsed:
-                mode = m
-                relax = r
-                break
-        if parsed['default']:
-            user = parsed['default'][0]
-        
-        link = self._get_link(message)
-        if not server:
-            if not link:
-                await self._msg_not_linked(message)
-                return
-            server = servers.by_name(link.default_server)
-        if not user:
-            if not link:
-                await self._msg_not_linked(message)
-                return
-            if not server.server_name in link.links:
-                await message.reply(f"You are not linked on {server.server_name}!")
-                return
-            user = link.links[server.server_name]
-        if mode == -1:
-            if link:
-                mode = link.default_mode
-                relax = link.default_relax
-            else:
-                mode = 0
-                relax = 0
-        if not server.supports_rx:
-            relax = 0
-        user = server.get_user_info(user)[0]
-        if not user:
-            await message.reply(f"User not found on {server.server_name}!")
-            return
-        previous_stats = self.get_last_stats(server.server_name, user.id, mode, relax, message.author.id)
-        if 'compare_to' in parsed:
-            try:
-                date = datetime.strptime(parsed['compare_to'], "%Y-%m-%d")
-            except ValueError:
-                await message.reply("Invalid date format! Use YYYY-MM-DD!")
-                return
-            previous_stats = self.get_stats_for_date(server.server_name, user.id, mode, relax, date)
-            if not previous_stats:
-                await message.reply("No stats found for that date!")
-                return
-        if datetime.now() - previous_stats.date > timedelta(minutes=5):
-            current_stats = self.get_current_stats(server.server_name, user.id, mode, relax, message.author.id)
-        else:
-            current_stats = previous_stats
-        embed = Embed(title=f"Stats for {user.username} on {server.server_name}")
-        embed.set_thumbnail(url=f"{server.get_user_pfp(user.id)}?{random.randint(0, 100000000)}")
-        
-        def add_field(title, name, prefix="", suffix="", format=",", asc=False):
-            value = getattr(current_stats, name)
-            value_old = getattr(previous_stats, name)
-            if value is None or value_old is None:
-                 embed.add_field(name=title, value=f"{prefix}{value}{suffix}", inline=True)
-            else:
-                delta = value_old-value if asc else value-value_old
-                delta_str = ""
-                if delta:
-                    delta_str = f"(+{delta:{format}})" if delta > 0 else f"({delta:{format}})"
-                embed.add_field(name=title, value=f"{prefix}{value:{format}}{suffix}\n{delta_str}", inline=True)
-        def add_field_level():
-            delta = current_stats.level - previous_stats.level
-            delta_str = ""
-            if delta:
-                delta_str = f"(+{delta*100:.2f}%)"
-            level = int(current_stats.level)
-            percentage = (current_stats.level - level) * 100
-            embed.add_field(name="Level", value=f"{level} +{percentage:.2f}% {delta_str}", inline=True)
-        def add_field_playtime():
-            delta = current_stats.play_time - previous_stats.play_time
-            delta_str = ""
-            if delta:
-                delta_str = f"(+{delta/60:.2f}m)"
-            embed.add_field(name="Play time", value=f"{current_stats.play_time/3600:.2f}h {delta_str}", inline=True)
-        add_field("Ranked score", "ranked_score")
-        add_field("Total score", "total_score")
-        add_field("Total hits", "total_hits")
-        add_field("Play count", "play_count")
-        add_field_playtime()
-        add_field("Replays watched", "replays_watched")
-        add_field_level()
-        add_field("Accuracy", "accuracy", suffix="%", format=".2f")
-        add_field("Max combo", "max_combo", suffix="x")
-        add_field("Global rank", "global_rank", prefix="#", asc=True)
-        add_field("Country rank", "country_rank", prefix="#", asc=True) # TODO: add country
-        add_field("Performance points", "pp", suffix="pp", format=".0f")
-        add_field("Global score rank", "global_score_rank", prefix="#", asc=True)
-        add_field("Country score rank", "country_score_rank", prefix="#", asc=True)
-        add_field("First places", "first_places")
-        await message.reply(embed=embed)
-
-class ResetCommand(Command):
+    custom_formatting = {
+        'level': format_level,
+        'play_time': format_playtime
+    }
     
     def __init__(self) -> None:
-        super().__init__("reset", "Resets your stats")
-    
+        super().__init__("show", "show info about a player")
+
+    def get_embed(self, server: ServerAPI, user: User, stats: Stats, old_stats: Stats, layout: str) -> Embed:
+        embed = Embed(title=f"Stats for {user.username}")
+        embed.set_thumbnail(url=f"{server.get_user_pfp(user.id)}?cachemakesmesad={random.randint(0, 9**9)}")
+        fields = [x.split("|") for x in layout.split("/")]
+        for field in fields:
+            name = field[0]
+            formatting = "{:.2f}"
+            reverse = False
+            if len(field) > 1:
+                formatting = field[1]
+                if len(field) > 2:
+                    reverse = bool(field[2])
+            def format(value: float) -> str:
+                if formatting in self.custom_formatting:
+                    return self.custom_formatting[formatting](value)
+                else:
+                    return formatting.format(value)
+            if name in stats.__dict__:
+                value = format(getattr(stats, name))
+                suffix = ""
+                if old_stats and name in old_stats.__dict__ and old_stats.__dict__[name]:
+                    difference = getattr(stats, name) - getattr(old_stats, name)
+                    if reverse:
+                        difference = -difference
+                    if difference:
+                        suffix = f" ({format(difference)})" if difference < 0 else f" (+{format(difference)})"
+                embed.add_field(name=self.variable_names[name] if name in self.variable_names else name, value=value+suffix, inline=True)
+                    
+        return embed
+
     async def run(self, message: Message, args: List[str]):
+        parsed = self._parse_args(args)
+        server = None
+        username = 0
+        mode = 0
+        relax = 0
+        formatting = "ranked_score|{:,}/total_score|{:,}/total_hits|{:,}/play_count|{:,}/play_time|play_time/replays_watched|{:,}/level|level/accuracy|{:.2f}%/max_combo|{:,}x/global_rank|#{:.0f}/country_rank|#{:.0f}/pp|{:.0f}pp"
+        if 'formatting' in parsed:
+            formatting = parsed['formatting']
+        if parsed['default']:
+            username = parsed['default'][0]
+        if 'server' in parsed:
+            server = servers.by_name(parsed['server'])
+            if not server:
+                await message.reply(f"Unknown server! Use !servers to see available servers.")
+                return
+        if 'mode' in parsed:
+            m = self._get_mode_from_string(parsed['mode'])
+            if not m:
+                await message.reply(f"Unknown mode!")
+                return
+            mode = m[0]
+            relax = m[1]
         link = self._get_link(message)
-        if not link:
+        if link:
+            if not server:
+                server = servers.by_name(link.default_server)
+            if not username:
+                username = link.links[server.server_name]
+        elif not username:
             await self._msg_not_linked(message)
             return
-        with app.database.managed_session() as session:
-            session.query(DBStatsTemp).filter(DBStatsTemp.discord_id == message.author.id).delete()
+        if not server:
+            server = servers.by_name("akatsuki")
+        user, stats = server.get_user_info(username, mode, relax)
+        if not user:
+            await message.reply(f"User not found on {server.server_name}!")
+            return
+        stats = stats[0].to_db()
+        old_stats = None
+        with database.managed_session() as session:
+            for stat in session.query(DBStatsTemp).filter(
+                DBStatsTemp.server == server.server_name,
+                DBStatsTemp.user_id == user.id,
+                DBStatsTemp.mode == mode,
+                DBStatsTemp.relax == relax,
+                DBStatsTemp.discord_id == message.author.id
+            ).order_by(DBStatsTemp.date.asc()):
+                if (datetime.now() - stat.date) > timedelta(days=1):
+                    session.delete(stat)
+                elif not old_stats:
+                    old_stats = stat
+                    session.expunge(stat)
+            if old_stats:
+                if (datetime.now() - old_stats.date) > timedelta(minutes=5):
+                    session.merge(stats.copy(message.author.id))
+            else:
+                session.merge(stats.copy(message.author.id))
             session.commit()
-        await message.reply("Stats reset!")
-
-class ClearsView(View):
-    
-    def __init__(self, title, **api_options):
-        super().__init__()
-        self.title = title
-        self.api_options = api_options
-        self.query = api.query_scores(**api_options)
-        self.sort_methods = ['pp', 'date', 'score', 'max_combo', 'mods', 'accuracy']
-        self.current_sort = 0
-        self.desc = True
-
-    def get_embed(self, scores=None) -> Embed:
-        if scores is None:
-            scores = self.query.next()
-        embed = Embed(title=f"{self.title} (Total: {self.query.count}, Page: {self.query._page}/{max(1, self.query.count/7):.0f})")
-        for score in scores:
-            beatmap = beatmaps.get_beatmap(score.beatmap_id)
-            if not beatmap:
-                continue
-            title = f"**{beatmap.get_title()}**\n"
-            desc = f"+{Mods(score.mods).short} {score.rank} {score.max_combo}x {score.accuracy:.2f}% [{score.count_300}/{score.count_100}/{score.count_50}/{score.count_miss}]\n"
-            desc += f"Score: {score.score:,} PP: {score.pp:.0f}pp Date: {score.date}\n"
-            embed.add_field(name=title, value=desc, inline=False)
-        return embed
-
-    @button(label="Previous", style=ButtonStyle.gray)
-    async def prev_button(self, interaction: Interaction, button: Button):
-        await interaction.response.defer()
-        await interaction.message.edit(embed=self.get_embed(self.query.prev()), view=self)
-
-    @button(label="Next", style=ButtonStyle.gray)
-    async def next_button(self, interaction: Interaction, button: Button):
-        if self.query._page >= max(1, self.query.count/7):
-            return
-        await interaction.response.defer()   
-        await interaction.message.edit(embed=self.get_embed(self.query.next()), view=self)
- 
-    @button(label="Sort: pp", style=ButtonStyle.green)
-    async def sort_button(self, interaction: Interaction, button: Button):
-        self.current_sort += 1
-        if self.current_sort >= len(self.sort_methods):
-            self.current_sort = 0
-        self.query.set_sort(self.sort_methods[self.current_sort], self.desc)
-        button.label = f"Sort: {self.sort_methods[self.current_sort]}"
-        await interaction.response.defer()
-        await interaction.message.edit(embed=self.get_embed(), view=self)
-
-    @button(label="Order: ↓", style=ButtonStyle.gray)
-    async def toggle_desc(self, interaction: Interaction, button: Button):
-        await interaction.response.defer()   
-        if self.desc:
-            self.desc = False
-            button.label = "Order: ↑"
-        else:
-            self.desc = True
-            button.label = "Order: ↓"
-        self.query.set_sort(self.sort_methods[self.current_sort], self.desc)
-        await interaction.message.edit(embed=self.get_embed(), view=self)
-
-    async def reply(self, message: Message):
-        await message.reply(embed=self.get_embed(), view=self)
-
-class ShowClearsCommand(Command):
-    
-    def __init__(self,) -> None:
-        super().__init__("showclears", "Shows your clears", aliases=["sc"])
-    
-    async def run(self, message: Message, args: List[str]):
-        parsed = self._parse_args(args)
-        modes = self._get_modes()
-
-        user = None
-        server = None
-        mode = -1
-        relax = -1
-        
-        for srv in servers.servers:
-            if srv.server_name in parsed:
-                server = srv
-                break
-        for name, (m, r) in modes.items():
-            if name in parsed:
-                mode = m
-                relax = r
-                break
-        if parsed['default']:
-            user = parsed['default'][0]
-        
-        link = self._get_link(message)
-        if not server:
-            if not link:
-                await self._msg_not_linked(message)
-                return
-            server = servers.by_name(link.default_server)
-        if not user:
-            if not link:
-                await self._msg_not_linked(message)
-                return
-            if not server.server_name in link.links:
-                await message.reply(f"You are not linked on {server.server_name}!")
-                return
-            user = link.links[server.server_name]
-        if mode == -1:
-            if link:
-                mode = link.default_mode
-                relax = link.default_relax
-            else:
-                mode = 0
-                relax = 0
-        if not server.supports_rx:
-            relax = 0
-        user = server.get_user_info(user)[0]
-        if not user:
-            await message.reply(f"User not found on {server.server_name}!")
-            return            
-        query = f"mode=={mode},relax=={relax},server=={server.server_name}"
-        if 'global' not in parsed:
-            query += f",user_id=={user.id}"
-        if "query" in parsed:
-            query += f",{parsed['query']}"
-        await ClearsView(f"{user.username} {self._get_mode_full_name(mode, relax)} {server.server_name.title()} Clears", query=query,length=7).reply(message)
-
-class FirstPlacesView(View):
-    
-    def __init__(self, title, **api_options):
-        super().__init__()
-        self.title = title
-        self.api_options = api_options
-        self.query = api.query_user_first_places(**api_options)
-        self.sort_methods = ['pp', 'date', 'score', 'max_combo', 'mods', 'accuracy']
-        self.type_methods = ['all', 'new', 'lost']
-        self.current_sort = 0
-        self.current_type = 0
-        self.desc = True
-
-    def get_embed(self, scores=None) -> Embed:
-        if scores is None:
-            scores = self.query.next()
-        embed = Embed(title=f"{self.title} (Total: {self.query.count}, Page: {self.query._page}/{max(1, self.query.count/7):.0f})")
-        for score in scores:
-            beatmap = beatmaps.get_beatmap(score.beatmap_id)
-            if not beatmap:
-                continue
-            title = f"**{beatmap.get_title()}**\n"
-            desc = f"+{Mods(score.mods).short} {score.rank} {score.max_combo}x {score.accuracy:.2f}% [{score.count_300}/{score.count_100}/{score.count_50}/{score.count_miss}]\n"
-            desc += f"Score: {score.score:,} PP: {score.pp:.0f}pp Date: {score.date}\n"
-            embed.add_field(name=title, value=desc, inline=False)
-        return embed
-
-    @button(label="Previous", style=ButtonStyle.gray)
-    async def prev_button(self, interaction: Interaction, button: Button):
-        await interaction.response.defer()
-        await interaction.message.edit(embed=self.get_embed(self.query.prev()), view=self)
-
-    @button(label="Next", style=ButtonStyle.gray)
-    async def next_button(self, interaction: Interaction, button: Button):
-        if self.query._page >= max(1, self.query.count/7):
-            return
-        await interaction.response.defer()   
-        await interaction.message.edit(embed=self.get_embed(self.query.next()), view=self)
- 
-    @button(label="Sort: pp", style=ButtonStyle.green)
-    async def sort_button(self, interaction: Interaction, button: Button):
-        self.current_sort += 1
-        if self.current_sort >= len(self.sort_methods):
-            self.current_sort = 0
-        self.query.set_sort(self.sort_methods[self.current_sort], self.desc)
-        button.label = f"Sort: {self.sort_methods[self.current_sort]}"
-        await interaction.response.defer()
-        await interaction.message.edit(embed=self.get_embed(), view=self)
-
-    @button(label="View: all", style=ButtonStyle.green)
-    async def type_button(self, interaction: Interaction, button: Button):
-        self.current_type += 1
-        if self.current_type >= len(self.type_methods):
-            self.current_type = 0
-        self.query.set_type(self.type_methods[self.current_type])
-        button.label = f"View: {self.type_methods[self.current_type]}"
-        await interaction.response.defer()
-        await interaction.message.edit(embed=self.get_embed(), view=self)
-
-    @button(label="Order: ↓", style=ButtonStyle.gray)
-    async def toggle_desc(self, interaction: Interaction, button: Button):
-        await interaction.response.defer()   
-        if self.desc:
-            self.desc = False
-            button.label = "Order: ↑"
-        else:
-            self.desc = True
-            button.label = "Order: ↓"
-        self.query.set_sort(self.sort_methods[self.current_sort], self.desc)
-        await interaction.message.edit(embed=self.get_embed(), view=self)
-
-    async def reply(self, message: Message):
-        await message.reply(embed=self.get_embed(), view=self)
-
-class ShowFirstsCommand(Command):
-    
-    def __init__(self,) -> None:
-        super().__init__("show1s", "Shows your first places", aliases=["firsts"])
-    
-    async def run(self, message: Message, args: List[str]):
-        parsed = self._parse_args(args)
-        modes = self._get_modes()
-
-        user = None
-        server = None
-        mode = -1
-        relax = -1
-        
-        for srv in servers.servers:
-            if srv.server_name in parsed:
-                server = srv
-                break
-        for name, (m, r) in modes.items():
-            if name in parsed:
-                mode = m
-                relax = r
-                break
-        if parsed['default']:
-            user = parsed['default'][0]
-        
-        link = self._get_link(message)
-        if not server:
-            if not link:
-                await self._msg_not_linked(message)
-                return
-            server = servers.by_name(link.default_server)
-        if not user:
-            if not link:
-                await self._msg_not_linked(message)
-                return
-            if not server.server_name in link.links:
-                await message.reply(f"You are not linked on {server.server_name}!")
-                return
-            user = link.links[server.server_name]
-        if mode == -1:
-            if link:
-                mode = link.default_mode
-                relax = link.default_relax
-            else:
-                mode = 0
-                relax = 0
-        if not server.supports_rx:
-            relax = 0
-        user = server.get_user_info(user)[0]
-        if not user:
-            await message.reply(f"User not found on {server.server_name}!")
-            return            
-        query = f""
-        if "query" in parsed:
-            query += f"{parsed['query']}"
-        await FirstPlacesView(f"{user.username} {self._get_mode_full_name(mode, relax)} {server.server_name.title()} First places", server=server.server_name, user_id=user.id, mode=mode, relax=relax, query=query,length=7).reply(message)
+        await message.reply(embed=self.get_embed(server, user, stats, old_stats, formatting))
