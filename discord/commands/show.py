@@ -4,7 +4,7 @@ from discord import Embed, Message
 from common.app import database
 from typing import List
 from . import Command
-from common.database.objects import DBStatsTemp
+from common.database.objects import DBStatsTemp, DBStats
 import common.servers as servers
 import random
 
@@ -93,6 +93,9 @@ class ShowCommand(Command):
         mode = 0
         relax = 0
         formatting = "ranked_score|{:,}/total_score|{:,}/total_hits|{:,}/play_count|{:,}/play_time|play_time/replays_watched|{:,}/level|level/accuracy|{:.2f}%/max_combo|{:,}x/global_rank|#{:.0f}/country_rank|#{:.0f}/pp|{:.0f}pp"
+        to_compare = None
+        if 'compare_to' in parsed:
+            to_compare = datetime.strptime(parsed['compare_to'], '%d/%m/%Y').date()
         if 'formatting' in parsed:
             formatting = parsed['formatting']
         if parsed['default']:
@@ -144,5 +147,11 @@ class ShowCommand(Command):
                     session.merge(stats.copy(message.author.id))
             else:
                 session.merge(stats.copy(message.author.id))
+            if to_compare:
+                old_stats = session.get(DBStats, (server.server_name, user.id, mode, relax, to_compare))
+                if not old_stats:
+                    await message.reply(f"We don't have stats stored for that day...")
+                    return
+                session.expunge(old_stats)
             session.commit()
         await message.reply(embed=self.get_embed(server, user, stats, old_stats, formatting))
