@@ -1,10 +1,12 @@
-from datetime import datetime, timedelta
 from common.api.server_api import User, Stats, ServerAPI
-from discord import Embed, Message
-from common.app import database
-from typing import List
-from . import Command
 from common.database.objects import DBStatsTemp, DBStats
+from common.app import database
+from . import Command
+
+from datetime import datetime, timedelta
+from discord import Embed, Message
+from typing import List
+
 import common.servers as servers
 import random
 
