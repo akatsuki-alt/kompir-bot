@@ -120,6 +120,9 @@ class ShowCommand(Command):
                 server = servers.by_name(link.default_server)
             if not username:
                 username = link.links[server.server_name]
+            if not 'mode' in parsed:
+                mode = link.default_mode
+                relax = link.default_relax
         elif not username:
             await self._msg_not_linked(message)
             return
