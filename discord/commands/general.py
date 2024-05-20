@@ -1,10 +1,15 @@
-import random
-from discord import Colour, Embed, Message
-from typing import List
+import discord
+from common.api.server_api import User, Score
 
+from discord import Colour, Embed, Message
+from discord.ui import View, button
+from typing import List
 from . import Command
 
+import common.repos.beatmaps as beatmaps
 import common.servers as servers
+import random
+
 
 class WhatIfCommand(Command):
     
@@ -119,3 +124,94 @@ class WhatIfCommand(Command):
         embed.set_footer(text=f"Bonus PP status: {percentage_filled:.0f}%")
         embed.colour = Colour(int(recalced))
         await message.reply(embed=embed)
+
+class TopView(View):
+    
+    def __init__(self, user: User, scores: List[Score]):
+        super().__init__()
+        self.user = user
+        self.scores = scores
+        self.length = 10
+        self.page = 0
+    
+    @button(label="Previous", style=discord.ButtonStyle.primary)
+    async def prev(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.page > 0:
+            self.page -= 1
+            await interaction.response.edit_message(embed=self.get_embed(), view=self)
+    
+    @button(label="Next", style=discord.ButtonStyle.primary)
+    async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.page < len(self.scores)/self.length:
+            self.page += 1
+            await interaction.response.edit_message(embed=self.get_embed(), view=self)
+    
+    def get_embed(self) -> Embed:
+        embed = Embed()
+        embed.title = f"{self.user.username}'s top plays (page {self.page+1}/{len(self.scores)/self.length+1:.0f})"
+        embed.description = ""
+        for i in range(self.page*5, min(len(self.scores), (self.page+1)*self.length)):
+            score = self.scores[i]
+            beatmap = beatmaps.get_beatmap(score.beatmap_id)
+            if not beatmap:
+                beatmap_title = "Unknown beatmap"
+            else:
+                beatmap_title = beatmap.get_title()
+            embed.description += f"**{i+1}.** **{beatmap_title}**\n"
+            embed.description += f"\t[{score.count_300}/{score.count_100}/{score.count_50}/{score.count_miss}] {score.max_combo}x/{beatmap.max_combo}x {score.pp}pp\n"            
+        return embed
+
+    async def reply(self, message: Message):
+        await message.reply(embed=self.get_embed(), view=self)
+
+
+class TopCommand(Command):
+    def __init__(self):
+        super().__init__(name="top", description="Get top plays of a user.")
+    
+    async def run(self, message: Message, args: List[str]):
+        parsed = self._parse_args(args)
+        server = None
+        username = 0
+        mode = 0
+        relax = 0
+
+        if parsed['default']:
+            username = parsed['default'][0]
+
+        if 'server' in parsed:
+            server = servers.by_name(parsed['server'])
+            if not server:
+                await message.reply(f"Unknown server! Use !servers to see available servers.")
+                return
+
+        if 'mode' in parsed:
+            mode = parsed['mode'][0]
+            relax = parsed['mode'][1]
+
+        link = self._get_link(message)
+        if link:
+            if not server:
+                server = servers.by_name(link.default_server)
+            if not username:
+                username = link.links[server.server_name]
+            if not 'mode' in parsed:
+                mode = link.default_mode
+                relax = link.default_relax
+        elif not username:
+            await self._msg_not_linked(message)
+            return
+
+        if not server:
+            server = servers.by_name("akatsuki")
+
+        user, stats = server.get_user_info(username, mode, relax)
+
+        top_100 = server.get_user_best(user.id, mode, relax)
+        
+        if not top_100:
+            await message.reply(f"No plays found on {server.server_name}!")
+            return
+        
+        await TopView(user, top_100).reply(message)
+        
