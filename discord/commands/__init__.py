@@ -6,6 +6,8 @@ from discord import Message
 from enum import IntEnum
 from typing import Dict, List, Tuple
 
+import common.servers as servers
+
 class PermissionLevelEnum(IntEnum):
     
     USER = 0
@@ -63,12 +65,21 @@ class Command:
         await message.reply("You do not have permission to use this command!")
 
     def _parse_args(self, args: List[str]) -> dict:
+        modes = self._get_modes()
+        server_names = [x.server_name for x in servers.servers]
         result = {'default': list()}
         prev = None
+        def handle_shortcuts():
+            if prev in modes:
+                result['mode'] = modes[prev]
+            elif prev in server_names:
+                result['server'] = prev
+            else:
+                result[prev] = None
         for arg in args:
             if arg.startswith('-') and not ' ' in arg:
                 if prev:
-                    result[prev] = None
+                    handle_shortcuts()
                 prev = arg[1:]
             else:
                 if prev:
@@ -77,7 +88,7 @@ class Command:
                 else:
                     result['default'].append(arg)
         if prev:
-            result[prev] = None
+            handle_shortcuts()
         return result
 
     async def run(self, message: Message, args: List[str]):

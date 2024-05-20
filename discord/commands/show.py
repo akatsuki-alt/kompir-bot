@@ -118,12 +118,8 @@ class ShowCommand(Command):
                 return
 
         if 'mode' in parsed:
-            m = self._get_mode_from_string(parsed['mode'])
-            if not m:
-                await message.reply(f"Unknown mode!")
-                return
-            mode = m[0]
-            relax = m[1]
+            mode = parsed['mode'][0]
+            relax = parsed['mode'][1]
 
         link = self._get_link(message)
         if link:
