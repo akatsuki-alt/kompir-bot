@@ -1,3 +1,4 @@
+from common.performance import by_version, SimulatedScore
 from common.api.server_api import User, Score
 from common.constants import Mods
 
@@ -186,6 +187,18 @@ class TopView(View):
         self.scores.reverse()
         await interaction.response.edit_message(embed=self.get_embed(), view=self)
 
+    def simulate_pp(self, score: Score):
+        pp_system = by_version(score.pp_system)
+        if pp_system:
+            fc_pp = pp_system.calculate_score(score, as_fc=True)
+            ss_pp = pp_system.simulate(SimulatedScore(score.beatmap_id, score.mode, mods=score.mods))
+            if not fc_pp:
+                fc_pp = score.pp
+        else:
+            fc_pp = 0
+            ss_pp = 0
+        return fc_pp, ss_pp
+
     def get_embed(self) -> Embed:
         embed = Embed(color=discord.Color.blue())
         embed.title = f"{self.user.username}'s top plays (page {self.page+1}/{int(len(self.scores)/self.length)})"
@@ -197,8 +210,9 @@ class TopView(View):
                 beatmap_title = "Unknown beatmap"
             else:
                 beatmap_title = beatmap.get_title()
+            fc_pp, ss_pp = self.simulate_pp(score)
             embed.description += f"{i+1}. **[{beatmap_title}](https://osu.ppy.sh/b/{beatmap.id}) +{Mods(score.mods).short}**\n"
-            embed.description += f"**PP**:    {score.pp:.0f}/{score.pp:.0f} (69pp if SS)\n"
+            embed.description += f"**PP**:    {score.pp:.0f}/{fc_pp:.0f} (SS: {ss_pp:.0f})\n"
             embed.description += f"**Stats**: __{score.count_300}/{score.count_100}/{score.count_50}/{score.count_miss}__ {score.accuracy:.2f}% __{score.max_combo}x/{beatmap.max_combo}x__ **{score.rank}** __{score.score:,}__\n"
             embed.description += f"**Date**:  {score.date}\n"
         
