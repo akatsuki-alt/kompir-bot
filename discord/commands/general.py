@@ -1,5 +1,5 @@
-import discord
 from common.api.server_api import User, Score
+from common.constants import Mods
 
 from discord import Colour, Embed, Message
 from discord.ui import View, button
@@ -8,6 +8,7 @@ from . import Command
 
 import common.repos.beatmaps as beatmaps
 import common.servers as servers
+import discord
 import random
 
 
@@ -131,7 +132,7 @@ class TopView(View):
         super().__init__()
         self.user = user
         self.scores = scores
-        self.length = 10
+        self.length = 5
         self.page = 0
     
     @button(label="Previous", style=discord.ButtonStyle.primary)
@@ -142,13 +143,23 @@ class TopView(View):
     
     @button(label="Next", style=discord.ButtonStyle.primary)
     async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if self.page < len(self.scores)/self.length:
+        if self.page < len(self.scores)/self.length-1:
             self.page += 1
-            await interaction.response.edit_message(embed=self.get_embed(), view=self)
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+    
+    @button(label="Last", style=discord.ButtonStyle.primary)
+    async def last(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if button.label == "Last":
+            self.page = int(len(self.scores)/self.length)-1
+            button.label = "First"
+        else:
+            self.page = 0
+            button.label = "Last"
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
     
     def get_embed(self) -> Embed:
-        embed = Embed()
-        embed.title = f"{self.user.username}'s top plays (page {self.page+1}/{len(self.scores)/self.length+1:.0f})"
+        embed = Embed(color=discord.Color.blue())
+        embed.title = f"{self.user.username}'s top plays (page {self.page+1}/{int(len(self.scores)/self.length)})"
         embed.description = ""
         for i in range(self.page*5, min(len(self.scores), (self.page+1)*self.length)):
             score = self.scores[i]
@@ -157,8 +168,11 @@ class TopView(View):
                 beatmap_title = "Unknown beatmap"
             else:
                 beatmap_title = beatmap.get_title()
-            embed.description += f"**{i+1}.** **{beatmap_title}**\n"
-            embed.description += f"\t[{score.count_300}/{score.count_100}/{score.count_50}/{score.count_miss}] {score.max_combo}x/{beatmap.max_combo}x {score.pp}pp\n"            
+            embed.description += f"{i+1}. **[{beatmap_title}](https://osu.ppy.sh/b/{beatmap.id}) +{Mods(score.mods).short}**\n"
+            embed.description += f"**PP**:    {score.pp:.0f}/{score.pp:.0f} (69pp if SS)\n"
+            embed.description += f"**Stats**: __{score.count_300}/{score.count_100}/{score.count_50}/{score.count_miss}__ {score.accuracy:.2f}% __{score.max_combo}x/{beatmap.max_combo}x__ **{score.rank}** __{score.score:,}__\n"
+            embed.description += f"**Date**:  {score.date}\n"
+        
         return embed
 
     async def reply(self, message: Message):
