@@ -130,24 +130,33 @@ class TopView(View):
     
     def __init__(self, user: User, scores: List[Score]):
         super().__init__()
+        self.sort_methods = [
+            ("pp", "PP"),
+            ("date", "Date"),
+            ("accuracy", "Accuracy"),
+            ("score", "Score"),
+            ("max_combo", "Max Combo"),
+        ]
         self.user = user
         self.scores = scores
         self.length = 5
         self.page = 0
+        self.sort = 0
+        self.desc = True
     
-    @button(label="Previous", style=discord.ButtonStyle.primary)
+    @button(label="Previous", style=discord.ButtonStyle.secondary)
     async def prev(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.page > 0:
             self.page -= 1
             await interaction.response.edit_message(embed=self.get_embed(), view=self)
     
-    @button(label="Next", style=discord.ButtonStyle.primary)
+    @button(label="Next", style=discord.ButtonStyle.secondary)
     async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.page < len(self.scores)/self.length-1:
             self.page += 1
         await interaction.response.edit_message(embed=self.get_embed(), view=self)
     
-    @button(label="Last", style=discord.ButtonStyle.primary)
+    @button(label="Last", style=discord.ButtonStyle.secondary)
     async def last(self, interaction: discord.Interaction, button: discord.ui.Button):
         if button.label == "Last":
             self.page = int(len(self.scores)/self.length)-1
@@ -157,6 +166,26 @@ class TopView(View):
             button.label = "Last"
         await interaction.response.edit_message(embed=self.get_embed(), view=self)
     
+    @button(label="PP", style=discord.ButtonStyle.secondary)
+    async def sort(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.sort += 1
+        if self.sort >= len(self.sort_methods):
+            self.sort = 0
+        button.label = self.sort_methods[self.sort][1]
+        self.scores.sort(key=lambda x: getattr(x, self.sort_methods[self.sort][0]), reverse=self.desc)
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+    
+    @button(label="↓", style=discord.ButtonStyle.secondary)
+    async def sort_direction(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if button.label == "↓":
+            button.label = "↑"
+            self.desc = False
+        else:
+            button.label = "↓"
+            self.desc = True
+        self.scores.reverse()
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
     def get_embed(self) -> Embed:
         embed = Embed(color=discord.Color.blue())
         embed.title = f"{self.user.username}'s top plays (page {self.page+1}/{int(len(self.scores)/self.length)})"
