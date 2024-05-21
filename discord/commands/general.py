@@ -129,7 +129,7 @@ class WhatIfCommand(Command):
 
 class TopView(View):
     
-    def __init__(self, user: User, scores: List[Score]):
+    def __init__(self, user: User, scores: List[Score], no_choke: bool, mode: int, relax: int):
         super().__init__()
         self.sort_methods = [
             ("pp", "PP"),
@@ -144,7 +144,51 @@ class TopView(View):
         self.page = 0
         self.sort = 0
         self.desc = True
-    
+        self.no_choke = no_choke
+        self.mode = mode
+        self.relax = relax
+        if self.no_choke:
+            self.no_choke_scores()
+
+    def no_choke_scores(self):
+        for score in self.scores:
+            if score.full_combo:
+                continue
+            if (beatmap := beatmaps.get_beatmap(score.beatmap_id)):
+                score.count_300 += score.count_miss
+                score.count_miss = 0
+                score.max_combo = beatmap.max_combo
+                score.accuracy = (300 * score.count_300 + 100 * score.count_100 + 50 * score.count_50) / (300 * (score.count_300 + score.count_100 + score.count_50)) * 100
+                pp_system = by_version(score.pp_system)
+                if pp_system:
+                    score.pp = pp_system.calculate_score(score, as_fc=True)
+                if score.accuracy == 100:
+                    if score.mods & 8 or score.mods & 1024:
+                        score.rank = "SSH"
+                    else:
+                        score.rank = "SS"
+                elif score.accuracy > 93.50:
+                    if score.mods & 8 or score.mods & 1024:
+                        score.rank = "SH"
+                    else:
+                        score.rank = "S"
+                elif score.accuracy > 90:
+                    score.rank = "A"
+                elif score.accuracy > 80:
+                    score.rank = "B"
+                elif score.accuracy > 70:
+                    score.rank = "C"
+                else:
+                    score.rank = "D"
+        self.scores.sort(key=lambda x: x.pp, reverse=True)
+        _, stats = servers.by_name(self.user.server).get_user_info(self.user.id, self.mode, self.relax)
+        self.old_pp = stats[0].pp
+        self.new_pp = 0
+        for x in range(min(len(self.scores), 100)):
+            self.new_pp += self.scores[x].pp * 0.95 ** x
+        self.new_pp += 416.32 # TODO: Actually get bonus pp
+
+
     @button(label="Previous", style=discord.ButtonStyle.secondary)
     async def prev(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.page > 0:
@@ -201,7 +245,10 @@ class TopView(View):
 
     def get_embed(self) -> Embed:
         embed = Embed(color=discord.Color.blue())
-        embed.title = f"{self.user.username}'s top plays (page {self.page+1}/{int(len(self.scores)/self.length)})"
+        if self.no_choke:
+            embed.title = f"{self.user.username}'s top plays if no chokes ({self.old_pp:,.0f}pp -> {self.new_pp:,.0f}pp) (page {self.page+1}/{int(len(self.scores)/self.length)})"
+        else:
+            embed.title = f"{self.user.username}'s top plays (page {self.page+1}/{int(len(self.scores)/self.length)})"
         embed.description = ""
         for i in range(self.page*5, min(len(self.scores), (self.page+1)*self.length)):
             score = self.scores[i]
@@ -213,7 +260,7 @@ class TopView(View):
             fc_pp, ss_pp = self.simulate_pp(score)
             embed.description += f"{i+1}. **[{beatmap_title}](https://osu.ppy.sh/b/{beatmap.id}) +{Mods(score.mods).short}**\n"
             embed.description += f"**PP**:    {score.pp:.0f}/{fc_pp:.0f} (SS: {ss_pp:.0f})\n"
-            embed.description += f"**Stats**: __{score.count_300}/{score.count_100}/{score.count_50}/{score.count_miss}__ {score.accuracy:.2f}% __{score.max_combo}x/{beatmap.max_combo}x__ **{score.rank}** __{score.score:,}__\n"
+            embed.description += f"**Stats**: __{score.count_300}/{score.count_100}/{score.count_50}/{score.count_miss}__ **{score.accuracy:.2f}%** __{score.max_combo}x/{beatmap.max_combo}x__ **{score.rank}** __{score.score:,}__\n"
             embed.description += f"**Date**:  {score.date}\n"
         
         return embed
@@ -232,6 +279,7 @@ class TopCommand(Command):
         username = 0
         mode = 0
         relax = 0
+        no_choke = 'nochoke' in parsed or 'nc' in parsed
 
         if parsed['default']:
             username = parsed['default'][0]
@@ -270,5 +318,5 @@ class TopCommand(Command):
             await message.reply(f"No plays found on {server.server_name}!")
             return
         
-        await TopView(user, top_100).reply(message)
+        await TopView(user, top_100, no_choke, mode, relax).reply(message)
         
