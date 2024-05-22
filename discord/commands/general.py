@@ -229,6 +229,7 @@ class TopView(View):
             button.label = "↓"
             self.desc = True
         self.scores.reverse()
+        self.page = 0
         await interaction.response.edit_message(embed=self.get_embed(), view=self)
 
     def simulate_pp(self, score: Score):
