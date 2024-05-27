@@ -1,14 +1,18 @@
+import discord
+from common.database.objects import DBStatsTemp, DBStats, DBUser, DBScore
 from common.api.server_api import User, Stats, ServerAPI
-from common.database.objects import DBStatsTemp, DBStats
 from common.app import database
 from . import Command
 
 from datetime import datetime, timedelta
-from discord import Embed, Message
+from discord.ui import View, button
+from common.constants import Mods
+from discord import Color, Colour, Embed, Message
 from typing import List
-
+from common.repos import beatmaps
 import common.servers as servers
 import random
+from common.performance import by_version, SimulatedScore
 
 def format_level(level: float) -> str:
     return f"{level:.0f} +{(level - int(level))*100:.1f}%"
@@ -61,6 +65,8 @@ class ShowCommand(Command):
     def get_embed(self, server: ServerAPI, user: User, stats: Stats, old_stats: Stats, layout: str) -> Embed:
         embed = Embed(title=f"Stats for {user.username}")
         embed.set_thumbnail(url=f"{server.get_user_pfp(user.id)}?cachemakesmesad={random.randint(0, 9**9)}")
+        embed.color = Colour(user.id if user.id < 16777215 else int(user.id / 9**3))
+        
         fields = [x.split("|") for x in layout.split("/")]
         
         for field in fields:
@@ -133,7 +139,7 @@ class ShowCommand(Command):
         elif not username:
             await self._msg_not_linked(message)
             return
-
+        
         if not server:
             server = servers.by_name("akatsuki")
 
@@ -177,3 +183,159 @@ class ShowCommand(Command):
             session.commit()
 
         await message.reply(embed=self.get_embed(server, user, stats, old_stats, formatting))
+
+class TopView(View):
+    
+    def __init__(self, user: DBUser, mode: int, relax: int, query):
+        super().__init__()
+        self.sort_methods = [
+            ("pp", "PP"),
+            ("date", "Date"),
+            ("accuracy", "Accuracy"),
+            ("score", "Score"),
+            ("max_combo", "Max Combo"),
+        ]
+        self.user = user
+        self.length = 5
+        self.count = query.count()
+        self.page = 0
+        self.sort = 0
+        self.desc = True
+        self.mode = mode
+        self.relax = relax
+        self.query = query
+        self.actual_query = self.query.order_by(getattr(DBScore, self.sort_methods[self.sort][0]).desc())  
+      
+    @button(label="Previous", style=discord.ButtonStyle.secondary)
+    async def prev(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.page > 0:
+            self.page -= 1
+            await interaction.response.edit_message(embed=self.get_embed(), view=self)
+    
+    @button(label="Next", style=discord.ButtonStyle.secondary)
+    async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.page < self.count/self.length-1:
+            self.page += 1
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+    
+    @button(label="Last", style=discord.ButtonStyle.secondary)
+    async def last(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if button.label == "Last":
+            self.page = int(self.count/self.length)-1
+            button.label = "First"
+        else:
+            self.page = 0
+            button.label = "Last"
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+    
+    @button(label="PP", style=discord.ButtonStyle.secondary)
+    async def sort(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.sort += 1
+        if self.sort >= len(self.sort_methods):
+            self.sort = 0
+        button.label = self.sort_methods[self.sort][1]
+        if self.desc: # lazy
+            self.actual_query = self.query.order_by(getattr(DBScore, self.sort_methods[self.sort][0]).desc())
+        else:
+            self.actual_query = self.query.order_by(getattr(DBScore, self.sort_methods[self.sort][0]).asc())
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+    
+    @button(label="↓", style=discord.ButtonStyle.secondary)
+    async def sort_direction(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if button.label == "↓":
+            button.label = "↑"
+            self.desc = False
+            self.actual_query = self.query.order_by(getattr(DBScore, self.sort_methods[self.sort][0]).asc())
+        else:
+            button.label = "↓"
+            self.desc = True
+            self.actual_query = self.query.order_by(getattr(DBScore, self.sort_methods[self.sort][0]).desc())
+        self.page = 0
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+    def simulate_pp(self, score: DBScore):
+        pp_system = by_version(score.pp_system)
+        if pp_system:
+            fc_pp = pp_system.calculate_db_score(score, as_fc=True)
+            ss_pp = pp_system.simulate(SimulatedScore(score.beatmap_id, score.mode, mods=score.mods))
+            if not fc_pp:
+                fc_pp = score.pp
+        else:
+            fc_pp = 0
+            ss_pp = 0
+        return fc_pp, ss_pp
+
+    def get_embed(self) -> Embed:
+        embed = Embed(color=discord.Color.blue())
+        embed.title = f"{self.user.username}'s clears ({self.count}, page {self.page+1}/{int(self.count/self.length)+1})"
+        embed.description = ""
+        i = self.page*self.length
+        for score in self.actual_query.offset(self.page*self.length).limit(self.length):
+            i+=1
+            score: DBScore = score
+            fc_pp, ss_pp = self.simulate_pp(score)
+            embed.description += f"{i}. **[{score.beatmap.get_title()}](https://osu.ppy.sh/b/{score.beatmap_id}) +{Mods(score.mods).short}**\n"
+            embed.description += f"**PP**:    {score.pp:.0f}/{fc_pp:.0f} (SS: {ss_pp:.0f})\n"
+            embed.description += f"**Stats**: __{score.count_300}/{score.count_100}/{score.count_50}/{score.count_miss}__ **{score.accuracy:.2f}%** __{score.max_combo}x/{score.beatmap.max_combo}x__ **{score.rank}** __{score.score:,}__\n"
+            embed.description += f"**Date**:  {score.date}\n"
+        return embed
+
+    async def reply(self, message: Message):
+        await message.reply(embed=self.get_embed(), view=self)
+
+class ShowClearsCommand(Command):
+    
+    def __init__(self) -> None:
+        super().__init__("showclears", "Show clears")
+        
+    async def run(self, message: Message, args: List[str]):
+        parsed = self._parse_args(args)
+        server = None
+        username = 0
+        mode = 0
+        relax = 0
+
+        if parsed['default']:
+            username = parsed['default'][0]
+
+        if 'server' in parsed:
+            server = servers.by_name(parsed['server'])
+            if not server:
+                await message.reply(f"Unknown server! Use !servers to see available servers.")
+                return
+
+        if 'mode' in parsed:
+            mode = parsed['mode'][0]
+            relax = parsed['mode'][1]
+
+        link = self._get_link(message)
+        if link:
+            if not server:
+                server = servers.by_name(link.default_server)
+            if not username:
+                username = link.links[server.server_name]
+            if not 'mode' in parsed:
+                mode = link.default_mode
+                relax = link.default_relax
+        elif not username:
+            await self._msg_not_linked(message)
+            return
+
+        if not server:
+            server = servers.by_name("akatsuki")
+
+        user, _ = server.get_user_info(username, mode, relax)
+
+        query = database.session.query(DBScore).filter(
+            DBScore.user_id == user.id,
+            DBScore.mode == mode,
+            DBScore.relax == relax,
+            DBScore.server == server.server_name
+        )
+        
+        if query.count() == 0:
+            await message.reply(f"User {user.username} has no clears on {server.server_name}!")
+            return
+        
+        await TopView(user, mode, relax, query).reply(message)
+        
