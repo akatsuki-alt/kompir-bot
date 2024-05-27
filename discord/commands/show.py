@@ -221,7 +221,7 @@ class TopView(View):
     @button(label="Last", style=discord.ButtonStyle.secondary)
     async def last(self, interaction: discord.Interaction, button: discord.ui.Button):
         if button.label == "Last":
-            self.page = int(self.count/self.length)-1
+            self.page = int(self.count/self.length)
             button.label = "First"
         else:
             self.page = 0
@@ -391,7 +391,7 @@ class FirstView(View):
     @button(label="Last", style=discord.ButtonStyle.secondary)
     async def last(self, interaction: discord.Interaction, button: discord.ui.Button):
         if button.label == "Last":
-            self.page = int(self.count/self.length)-1
+            self.page = int(self.count/self.length)
             button.label = "First"
         else:
             self.page = 0
