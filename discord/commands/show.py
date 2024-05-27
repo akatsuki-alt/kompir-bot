@@ -1,5 +1,5 @@
 import discord
-from common.database.objects import DBStatsTemp, DBStats, DBUser, DBScore
+from common.database.objects import DBFirstPlace, DBStatsTemp, DBStats, DBUser, DBScore
 from common.api.server_api import User, Stats, ServerAPI
 from common.app import database
 from . import Command
@@ -338,4 +338,178 @@ class ShowClearsCommand(Command):
             return
         
         await TopView(user, mode, relax, query).reply(message)
+
+class FirstView(View):
+    
+    def __init__(self, user: DBUser, mode: int, relax: int, query, latest_date: datetime, earlier_date: datetime):
+        super().__init__()
+        self.user = user
+        self.mode = mode
+        self.relax = relax
+        self.query = query
+        self.sort_methods = [
+            ("pp", "PP"),
+            ("date", "Date"),
+            ("accuracy", "Accuracy"),
+            ("score", "Score"),
+            ("max_combo", "Max Combo"),
+        ]
+        self.sort = 0
+        self.type = 0
+        self.desc = True
+        self.latest_date = latest_date
+        self.earlier_date = earlier_date
+        self.sort_query(self.sort_methods[self.sort][0], self.desc, 0)
+        self.count = self.actual_query.count()
+        self.length = 7
+        self.page = 0
+
+    def simulate_pp(self, score: DBScore):
+        pp_system = by_version(score.pp_system)
+        if pp_system:
+            fc_pp = pp_system.calculate_db_score(score, as_fc=True)
+            ss_pp = pp_system.simulate(SimulatedScore(score.beatmap_id, score.mode, mods=score.mods))
+            if not fc_pp:
+                fc_pp = score.pp
+        else:
+            fc_pp = 0
+            ss_pp = 0
+        return fc_pp, ss_pp
+
+    @button(label="Previous", style=discord.ButtonStyle.secondary)
+    async def prev(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.page > 0:
+            self.page -= 1
+            await interaction.response.edit_message(embed=self.get_embed(), view=self)
+    
+    @button(label="Next", style=discord.ButtonStyle.secondary)
+    async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.page < self.count/self.length-1:
+            self.page += 1
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+    
+    @button(label="Last", style=discord.ButtonStyle.secondary)
+    async def last(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if button.label == "Last":
+            self.page = int(self.count/self.length)-1
+            button.label = "First"
+        else:
+            self.page = 0
+            button.label = "Last"
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+    
+    @button(label="PP", style=discord.ButtonStyle.secondary)
+    async def sort_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.sort += 1
+        if self.sort >= len(self.sort_methods):
+            self.sort = 0
+        button.label = self.sort_methods[self.sort][1]
+        self.sort_query(self.sort_methods[self.sort][0], self.desc, self.type)
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+    
+    @button(label="↓", style=discord.ButtonStyle.secondary)
+    async def sort_direction(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if button.label == "↓":
+            button.label = "↑"
+            self.desc = False
+            self.sort_query(self.sort_methods[self.sort][0], self.desc, self.type)
+        else:
+            button.label = "↓"
+            self.desc = True
+            self.sort_query(self.sort_methods[self.sort][0], self.desc, self.type)
+        self.page = 0
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+    def sort_query(self, column_name, desc, query_type):
+        if query_type == 0:
+            self.actual_query = self.query.filter(DBFirstPlace.date == self.latest_date).join(DBScore).order_by(getattr(DBScore, column_name).desc() if desc else getattr(DBScore, column_name).asc())
+            self.page = 0
+
+    def get_embed(self) -> Embed:
+        embed = Embed(color=discord.Color.blue())
+        embed.title = f"{self.user.username}'s clears ({self.count}, page {self.page+1}/{int(self.count/self.length)+1})"
+        embed.description = ""
+        i = self.page*self.length
+        for score in self.actual_query.offset(self.page*self.length).limit(self.length):
+            i+=1
+            score: DBScore = score.score
+            fc_pp, ss_pp = self.simulate_pp(score)
+            embed.description += f"{i}. **[{score.beatmap.get_title()}](https://osu.ppy.sh/b/{score.beatmap_id}) +{Mods(score.mods).short}**\n"
+            embed.description += f"**PP**:    {score.pp:.0f}/{fc_pp:.0f} (SS: {ss_pp:.0f})\n"
+            embed.description += f"**Stats**: __{score.count_300}/{score.count_100}/{score.count_50}/{score.count_miss}__ **{score.accuracy:.2f}%** __{score.max_combo}x/{score.beatmap.max_combo}x__ **{score.rank}** __{score.score:,}__\n"
+            embed.description += f"**Date**:  {score.date}\n"
+        return embed
+
+    async def reply(self, message: Message):
+        await message.reply(embed=self.get_embed(), view=self)
+
+
+class Show1sCommand(Command):
+    
+    def __init__(self) -> None:
+        super().__init__("show1s", "Show first places")
         
+    async def run(self, message: Message, args: List[str]):
+        parsed = self._parse_args(args)
+        server = None
+        username = 0
+        mode = 0
+        relax = 0
+
+        if parsed['default']:
+            username = parsed['default'][0]
+
+        if 'server' in parsed:
+            server = servers.by_name(parsed['server'])
+            if not server:
+                await message.reply(f"Unknown server! Use !servers to see available servers.")
+                return
+
+        if 'mode' in parsed:
+            mode = parsed['mode'][0]
+            relax = parsed['mode'][1]
+
+        link = self._get_link(message)
+        if link:
+            if not server:
+                server = servers.by_name(link.default_server)
+            if not username:
+                username = link.links[server.server_name]
+            if not 'mode' in parsed:
+                mode = link.default_mode
+                relax = link.default_relax
+        elif not username:
+            await self._msg_not_linked(message)
+            return
+
+        if not server:
+            server = servers.by_name("akatsuki")
+
+        user, _ = server.get_user_info(username, mode, relax)
+
+        query = database.session.query(DBFirstPlace).filter(
+            DBFirstPlace.user_id == user.id,
+            DBFirstPlace.mode == mode,
+            DBFirstPlace.relax == relax,
+            DBFirstPlace.server == server.server_name,
+        )
+
+        latest_date = query.order_by(DBFirstPlace.date.desc()).first()
+        earlier_date = None
+        
+        if not latest_date:
+            await message.reply(f"User {user.username} has no recorded first places on {server.server_name}!")
+            return
+        
+        latest_date = latest_date.date
+        
+        subquery = query.order_by(DBFirstPlace.date).distinct(DBFirstPlace.date).limit(2).all()
+        
+        if len(subquery) == 2:
+            earlier_date = subquery[1].date
+        
+        if query.filter(DBFirstPlace.date == latest_date).count() == 0:
+            await message.reply(f"User {user.username} has no recorded first places on {server.server_name}!")
+            return
+        
+        await FirstView(user, mode, relax, query, latest_date, earlier_date).reply(message)
